@@ -8,12 +8,16 @@ Created on Wed Oct 25 19:25:22 2017
 
 import numpy as np
 import matplotlib.pyplot as plt
-
+import torch
+from torch.autograd import Variable
+import torch.nn as nn
+import torch.nn.functional as F
+import torch.optim as optim
 
 classNum = 5
 batchSize = 50
 numOfElementsPerClass = int(batchSize / classNum)
-epochNum = 10
+epochNum = 1
 
 '''
 description: input an 2D array, show image of that array on console
@@ -57,30 +61,76 @@ side effect: None
 '''
 def formBatch(img, imgInfo, epochIdx):
     startPoint = []
-    truth = []
+    truth = np.zeros((batchSize, classNum), dtype = np.float32)
     for i in range(classNum):
         startPoint.append((epochIdx * numOfElementsPerClass) % imgInfo[0][i])
-    batch = np.ndarray(shape = (batchSize, imgInfo[2]), dtype = float)
+    batch = np.zeros((batchSize, 32, 32), dtype = np.float32)
     for i in range(classNum):
         for j in range(numOfElementsPerClass):
-            batch[i*numOfElementsPerClass+j] = img[i][(startPoint[i] + j) % imgInfo[0][i]]
-            truth.append(imgInfo[1][i])
-    return [batch, truth]
+            batch[i*numOfElementsPerClass+j][2:30, 2:30] = (img[i][(startPoint[i] + j) % imgInfo[0][i]]).reshape((28, 28))
+            truth[i * numOfElementsPerClass + j][i] = 1.0
+    return batch, truth
+
+class Net(nn.Module):
+
+    def __init__(self):
+        super(Net, self).__init__()
+        # 1 input image channel, 6 output channels, 5x5 square convolution
+        # kernel
+        self.conv1 = nn.Conv2d(1, 6, 5)
+        self.conv2 = nn.Conv2d(6, 16, 5)
+        # an affine operation: y = Wx + b
+        self.fc1 = nn.Linear(16 * 5 * 5, 120)
+        self.fc2 = nn.Linear(120, 84)
+        self.fc3 = nn.Linear(84, 5)
+
+    def forward(self, x):
+        # Max pooling over a (2, 2) window
+        x = F.max_pool2d(F.relu(self.conv1(x)), (2, 2))
+        # If the size is a square you can only specify a single number
+        x = F.max_pool2d(F.relu(self.conv2(x)), 2)
+        x = x.view(-1, self.num_flat_features(x))
+        x = F.relu(self.fc1(x))
+        x = F.relu(self.fc2(x))
+        x = self.fc3(x)
+        return x
+
+    def num_flat_features(self, x):
+        size = x.size()[1:]  # all dimensions except the batch dimension
+        num_features = 1
+        for s in size:
+            num_features *= s
+        return num_features
+    
 
 '''
 description: training process
 '''
-def train(batch, truth):
-    pass
+def train(batch, truth, net, lossCriterion, optimizer):
+    batchResize = batch.reshape((batchSize, 1, 32, 32))
+    batchFeed = Variable(torch.from_numpy(batchResize))
+    output = net(batchFeed)
+    target = Variable(torch.from_numpy(truth))
+    optimizer.zero_grad()   # zero the gradient buffers
+    loss = lossCriterion(output, target)
+    loss.backward()
+    optimizer.step()    # Does the update
+
 
 def main():   
-    epochIdx = 0
     img = []
     imgInfo = [] #[[img number], [category names], img size]
     imgLoad(img, imgInfo)
+    lossCriterion = nn.MSELoss()
+    net = Net()
+    # create optimizer
+    optimizer = optim.SGD(net.parameters(), lr=0.01)
     for epochIdx in range(epochNum):
-        [batch, truth] = formBatch(img, imgInfo, epochIdx)
-        train(batch, truth)
+        batch, truth = formBatch(img, imgInfo, epochIdx)
+        train(batch, truth, net, lossCriterion, optimizer)
+        
+    
+
         
 if __name__ == "__main__":
     main()
