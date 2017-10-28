@@ -12,6 +12,7 @@ class GoogleNet(nn.Module):
         # 1x1 convolution kernel_size=1, padding=0
         # 3x3 convolution kernel_size=3, padding=1
         # 5x5 convolution kernel_size=5, padding=2
+        #Google net 3a 3b inception module
         self.conv1_1_3a = nn.Conv2d(1, 64, 1,padding=0)
         self.conv3_3_reduce_3a=nn.Conv2d(1,96,1,padding=0)
         self.conv5_5_reduce_3a=nn.Conv2d(1,16,1,padding=0)
@@ -26,7 +27,20 @@ class GoogleNet(nn.Module):
         self.conv5_5_3b=nn.Conv2d(32,96,5,padding=2)
         self.conv1_1_max_pool_3b=nn.Conv2d(256,64,1,padding=0)
 
+        #google net 4a inception module
+        self.conv1_1_4a = nn.Conv2d(480, 192, 1,padding=0)
+        self.conv3_3_reduce_4a=nn.Conv2d(480,96,1,padding=0)
+        self.conv5_5_reduce_4a=nn.Conv2d(480,16,1,padding=0)
+        self.conv3_3_4a=nn.Conv2d(96,208,3,padding=1)
+        self.conv5_5_4a=nn.Conv2d(16,48,5,padding=2)
+        self.conv1_1_max_pool_4a=nn.Conv2d(480,64,1,padding=0)
 
+        self.avg_pool_out_4a=nn.avgPool2d(5,stride=3);
+        self.conv1_1_avg_pool_4a=nn.Conv2d(1,512,padding=0)
+        self.fc1_4a=nn.Linear(4*4*512,1024);
+        self.fc2_4a=nn.Dropout(p=0.7);
+        self.fc3_4a=nn.Linear(1024,5);
+        self.fc4_4a=nn.Softmax();
         '''self.conv2 = nn.Conv2d(6, 16, 5)
         # an affine operation: y = Wx + b
         self.fc1 = nn.Linear(16 * 5 * 5, 120)
@@ -41,13 +55,26 @@ class GoogleNet(nn.Module):
         max_pool_3a=F.relu(self.conv1_1_max_pool_3a(F.relu(F.max_pool2d(x),3,padding=1)))
         3a_output=torch.cat((conv1_1_3a,conv3_3_3a,conv5_5_3a,max_pool_3a),0);
 
-        conv1_1_3bb=F.relu(self.conv1_1_3b(3a_output))
+        conv1_1_3b=F.relu(self.conv1_1_3b(3a_output))
         conv3_3_3b=F.relu(self.conv3_3_3b(F.relu(self.conv3_3_reduce_3b(3a_output))))
         conv5_5_3b=F.relu(self.conv5_5_3b(F.relu(self.conv5_5_reduce_3b(3a_output))))
         max_pool_3b=F.relu(self.conv1_1_max_pool_3b(F.relu(F.max_pool2d(3a_output),3,padding=1)))
-        3b_output=torch.cat((conv1_1_3b,conv3_3_3b,conv5_5_3b,max_pool_3b),0);        
-        output=3b_output;
-        return output;
+        3b_output=torch.cat((conv1_1_3b,conv3_3_3b,conv5_5_3b,max_pool_3b),0);   
+
+        4a_input=F.relu(F.max_pool2d(3b_output),3,stride=2);
+        conv1_1_4a=F.relu(self.conv1_1_3a(4a_input))
+        conv3_3_4a=F.relu(self.conv3_3_3a(F.relu(self.conv3_3_reduce_3a(4a_input))))
+        conv5_5_4a=F.relu(self.conv5_5_3a(F.relu(self.conv5_5_reduce_3a(4a_input))))
+        max_pool_4a=F.relu(self.conv1_1_max_pool_3a(F.relu(F.max_pool2d(4a_input),3,padding=1)))
+        4a_output=torch.cat((conv1_1_4a,conv3_3_4a,conv5_5_4a,max_pool_4a),0);
+        
+        4a_avg_output=F.relu(self.conv1_1_avg_pool_4a(F.relu(self.avg_pool_out_4a(4a_output))));
+        4a_flatten=4a_avg_output.view(-1,self.num_flat_features(4a_avg_output));
+        4a_flatten=F.relu(self.fc1_4a(4a_flatten))
+        4a_flatten=F.relu(self.fc2_4a(4a_flatten))
+        4a_flatten=F.relu(self.fc3_4a(4a_flatten))
+        4a_flatten=self.fc4_4a(4a_flatten)
+        return 4a_flatten;
         '''x = F.max_pool2d(F.relu(self.conv1(x)), (2, 2))
         # If the size is a square you can only specify a single number
         x = F.max_pool2d(F.relu(self.conv2(x)), 2)
