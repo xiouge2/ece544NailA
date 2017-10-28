@@ -55,8 +55,9 @@ description: automatically form a batch for training. Evenly divide image number
 input: img: from imgLoad()
        imgInfo: from imgLoad()
        epochIdx: epoch index
-output: batch: a batch of images for training, [image number, pixels]
-        truth: 1D array, corresponding categories of images
+output: batch: a batch of images for training, [batchSize, (Height+maskHeight-1), (Width+maskWidth-1)]
+        truth: 2D array, [image index, truth vector]
+               truth vector: For example, if eye is true, then truth vector is [1, 0, 0, 0, 0]
 side effect: None
 '''
 def formBatch(img, imgInfo, epochIdx):
@@ -67,10 +68,14 @@ def formBatch(img, imgInfo, epochIdx):
     batch = np.zeros((batchSize, 32, 32), dtype = np.float32)
     for i in range(classNum):
         for j in range(numOfElementsPerClass):
+            # add halograms to an image, mask size is 5x5
             batch[i*numOfElementsPerClass+j][2:30, 2:30] = (img[i][(startPoint[i] + j) % imgInfo[0][i]]).reshape((28, 28))
             truth[i * numOfElementsPerClass + j][i] = 1.0
     return batch, truth
 
+'''
+description: Now we are using LeNet. We will change to GoogLeNet later.
+'''
 class Net(nn.Module):
 
     def __init__(self):
@@ -104,11 +109,21 @@ class Net(nn.Module):
     
 
 '''
-description: training process
+description: training process. Update weights with each batch of images
+input:  batch: from formBatch
+        truth: from formBatch
+        net: from class Net()
+        lossCriterion: what kind of loss function
+        optimizer: specify update rules
+output: None
+side effects:   weights of CNN is updated
 '''
 def train(batch, truth, net, lossCriterion, optimizer):
+    #reshape a batch to [batch size, channels, Height, Width]
     batchResize = batch.reshape((batchSize, 1, 32, 32))
+    #convert to a tensor
     batchFeed = Variable(torch.from_numpy(batchResize))
+    #inference and back propagate and update weights
     output = net(batchFeed)
     target = Variable(torch.from_numpy(truth))
     optimizer.zero_grad()   # zero the gradient buffers
@@ -117,17 +132,22 @@ def train(batch, truth, net, lossCriterion, optimizer):
     optimizer.step()    # Does the update
 
 
-def main():   
+def main():  
+    # load process
     img = []
     imgInfo = [] #[[img number], [category names], img size]
     imgLoad(img, imgInfo)
-    lossCriterion = nn.MSELoss()
+    
+    #train process
+    lossCriterion = nn.MSELoss() #using MSE loss
     net = Net()
     # create optimizer
-    optimizer = optim.SGD(net.parameters(), lr=0.01)
+    optimizer = optim.SGD(net.parameters(), lr=0.01) # use SGD update rules
     for epochIdx in range(epochNum):
         batch, truth = formBatch(img, imgInfo, epochIdx)
         train(batch, truth, net, lossCriterion, optimizer)
+        
+    #test process, still in progress
         
     
 
