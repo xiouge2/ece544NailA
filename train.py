@@ -57,8 +57,7 @@ input: img: from imgLoad()
        imgInfo: from imgLoad()
        epochIdx: epoch index
 output: batch: a batch of images for training, [batchSize, (Height+maskHeight-1), (Width+maskWidth-1)]
-        truth: 2D array, [image index, truth vector]
-               truth vector: For example, if eye is true, then truth vector is [1, 0, 0, 0, 0]
+        truth: 1D array, [classIndex]
 side effect: None
 '''
 def formBatch(img, imgInfo, epochIdx):
@@ -81,8 +80,7 @@ input: img: from imgLoad()
        imgInfo: from imgLoad()
        epochIdx: epoch index
 output: batch: a batch of images for training, [batchSize, (Height+maskHeight-1), (Width+maskWidth-1)]
-        truth: 2D array, [image index, truth vector]
-               truth vector: For example, if eye is true, then truth vector is [1, 0, 0, 0, 0]
+        truth: 1D array, [classIndex]
 side effect: None
 '''
 def testBatch(img, imgInfo, epochIdx):
@@ -141,7 +139,7 @@ input:  batch: from formBatch
         lossCriterion: what kind of loss function
         optimizer: specify update rules
 output: None
-side effects:   weights of CNN is updated
+side effects:   weights of CNN are updated
 '''
 def train(batch, truth, net, lossCriterion, optimizer):
     #reshape a batch to [batch size, channels, Height, Width]
@@ -164,7 +162,7 @@ input:  batch: from formBatch
         truth: from formBatch
         net: from class Net()
 
-output: return the correct instances within a batch
+output: return the number of correct predictions within a batch
 side effects: None
 '''
 def test(batch, truth, net):
