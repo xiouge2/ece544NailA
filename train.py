@@ -17,7 +17,8 @@ import torch.optim as optim
 classNum = 5
 batchSize = 50
 numOfElementsPerClass = int(batchSize / classNum)
-epochNum = 1
+epochNum = 1000
+testNum = 100
 
 '''
 description: input an 2D array, show image of that array on console
@@ -61,6 +62,30 @@ output: batch: a batch of images for training, [batchSize, (Height+maskHeight-1)
 side effect: None
 '''
 def formBatch(img, imgInfo, epochIdx):
+    startPoint = []
+    truth = np.zeros((batchSize, classNum), dtype = np.float32)
+    for i in range(classNum):
+        startPoint.append((epochIdx * numOfElementsPerClass) % imgInfo[0][i])
+    batch = np.zeros((batchSize, 32, 32), dtype = np.float32)
+    for i in range(classNum):
+        for j in range(numOfElementsPerClass):
+            # add halograms to an image, mask size is 5x5
+            batch[i*numOfElementsPerClass+j][2:30, 2:30] = (img[i][(startPoint[i] + j) % imgInfo[0][i]]).reshape((28, 28))
+            truth[i * numOfElementsPerClass + j][i] = 1.0
+    return batch, truth
+
+'''
+description: automatically form a batch for testing. Evenly divide image number
+             for each class. 
+input: img: from imgLoad()
+       imgInfo: from imgLoad()
+       epochIdx: epoch index
+output: batch: a batch of images for training, [batchSize, (Height+maskHeight-1), (Width+maskWidth-1)]
+        truth: 2D array, [image index, truth vector]
+               truth vector: For example, if eye is true, then truth vector is [1, 0, 0, 0, 0]
+side effect: None
+'''
+def testBatch(img, imgInfo, epochIdx):
     startPoint = []
     truth = np.zeros((batchSize, classNum), dtype = np.float32)
     for i in range(classNum):
@@ -125,12 +150,37 @@ def train(batch, truth, net, lossCriterion, optimizer):
     batchFeed = Variable(torch.from_numpy(batchResize))
     #inference and back propagate and update weights
     output = net(batchFeed)
+    #print(output.data.numpy()[0], truth[0])
     target = Variable(torch.from_numpy(truth))
     optimizer.zero_grad()   # zero the gradient buffers
     loss = lossCriterion(output, target)
     loss.backward()
     optimizer.step()    # Does the update
 
+'''
+description: testing process. 
+input:  batch: from formBatch
+        truth: from formBatch
+        net: from class Net()
+
+output: return the correct instances within a batch
+side effects: None
+'''
+def test(batch, truth, net):
+    #reshape a batch to [batch size, channels, Height, Width]
+    batchResize = batch.reshape((batchSize, 1, 32, 32))
+    #convert to a tensor
+    batchFeed = Variable(torch.from_numpy(batchResize))
+    #inference and back propagate and update weights
+    output = net(batchFeed)
+    output = output.data.numpy()
+    matchNum = 0
+    for i in range(output.shape[0]):
+        #print(output[i], truth[i])
+        if np.argmax(output[i]) == np.argmax(truth[i]):
+            matchNum += 1
+    return matchNum
+    
 
 def main():  
     # load process
@@ -148,6 +198,11 @@ def main():
         train(batch, truth, net, lossCriterion, optimizer)
         
     #test process, still in progress
+    correctNum = 0
+    for epochIdx in range(int(testNum / batchSize)):
+        batch, truth = formBatch(img, imgInfo, epochIdx)
+        correctNum += test(batch, truth, net)
+    print("accuracy = %f" %(float(correctNum) / testNum))
         
     
 
