@@ -63,7 +63,7 @@ side effect: None
 '''
 def formBatch(img, imgInfo, epochIdx):
     startPoint = []
-    truth = np.zeros((batchSize, classNum), dtype = np.float32)
+    truth = []
     for i in range(classNum):
         startPoint.append((epochIdx * numOfElementsPerClass) % imgInfo[0][i])
     batch = np.zeros((batchSize, 32, 32), dtype = np.float32)
@@ -71,7 +71,7 @@ def formBatch(img, imgInfo, epochIdx):
         for j in range(numOfElementsPerClass):
             # add halograms to an image, mask size is 5x5
             batch[i*numOfElementsPerClass+j][2:30, 2:30] = (img[i][(startPoint[i] + j) % imgInfo[0][i]]).reshape((28, 28))
-            truth[i * numOfElementsPerClass + j][i] = 1.0
+            truth.append(i)
     return batch, truth
 
 '''
@@ -87,7 +87,7 @@ side effect: None
 '''
 def testBatch(img, imgInfo, epochIdx):
     startPoint = []
-    truth = np.zeros((batchSize, classNum), dtype = np.float32)
+    truth = []
     for i in range(classNum):
         startPoint.append((epochIdx * numOfElementsPerClass) % imgInfo[0][i])
     batch = np.zeros((batchSize, 32, 32), dtype = np.float32)
@@ -95,7 +95,7 @@ def testBatch(img, imgInfo, epochIdx):
         for j in range(numOfElementsPerClass):
             # add halograms to an image, mask size is 5x5
             batch[i*numOfElementsPerClass+j][2:30, 2:30] = (img[i][(startPoint[i] + j) % imgInfo[0][i]]).reshape((28, 28))
-            truth[i * numOfElementsPerClass + j][i] = 1.0
+            truth.append(i)
     return batch, truth
 
 '''
@@ -151,7 +151,8 @@ def train(batch, truth, net, lossCriterion, optimizer):
     #inference and back propagate and update weights
     output = net(batchFeed)
     #print(output.data.numpy()[0], truth[0])
-    target = Variable(torch.from_numpy(truth))
+    target = torch.LongTensor(truth)
+    target = Variable(target)
     optimizer.zero_grad()   # zero the gradient buffers
     loss = lossCriterion(output, target)
     loss.backward()
@@ -173,13 +174,10 @@ def test(batch, truth, net):
     batchFeed = Variable(torch.from_numpy(batchResize))
     #inference and back propagate and update weights
     output = net(batchFeed)
-    output = output.data.numpy()
-    matchNum = 0
-    for i in range(output.shape[0]):
-        #print(output[i], truth[i])
-        if np.argmax(output[i]) == np.argmax(truth[i]):
-            matchNum += 1
-    return matchNum
+    #output = output.data.numpy()
+    _, predicted = torch.max(output.data, 1)
+    return (predicted == torch.LongTensor(truth)).sum()
+    
     
 
 def main():  
@@ -189,10 +187,10 @@ def main():
     imgLoad(img, imgInfo)
     
     #train process
-    lossCriterion = nn.MSELoss() #using MSE loss
+    lossCriterion = nn.CrossEntropyLoss() #using cross entropy loss
     net = Net()
     # create optimizer
-    optimizer = optim.SGD(net.parameters(), lr=0.01) # use SGD update rules
+    optimizer = optim.SGD(net.parameters(), lr=0.001, momentum=0.9) # use SGD update rules
     for epochIdx in range(epochNum):
         batch, truth = formBatch(img, imgInfo, epochIdx)
         train(batch, truth, net, lossCriterion, optimizer)
