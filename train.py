@@ -13,6 +13,7 @@ from torch.autograd import Variable
 import torch.nn as nn
 import torch.nn.functional as F
 import torch.optim as optim
+from googleNetClass import GoogleNet
 
 classNum = 5
 batchSize = 50
@@ -46,13 +47,13 @@ def imgLoad(img, imgInfo):
     imgHand = np.load('image_npy/hand.npy') #291773 imgs
     imgLeg = np.load('image_npy/leg.npy') #116804 imgs
     img += [imgEye, imgFoot, imgFinger, imgHand, imgLeg]
-    imgInfo += [[imgEye.shape[0], imgFoot.shape[0], imgFinger.shape[0], imgHand.shape[0], imgLeg.shape[0]], 
+    imgInfo += [[imgEye.shape[0], imgFoot.shape[0], imgFinger.shape[0], imgHand.shape[0], imgLeg.shape[0]],
                     ['eye', 'foot', 'finger', 'hand', 'leg'],
                     imgEye.shape[1]]
 
 '''
 description: automatically form a batch for training. Evenly divide image number
-             for each class. 
+             for each class.
 input: img: from imgLoad()
        imgInfo: from imgLoad()
        epochIdx: epoch index
@@ -61,6 +62,8 @@ output: batch: a batch of images for training, [batchSize, (Height+maskHeight-1)
 side effect: None
 '''
 def formBatch(img, imgInfo, epochIdx):
+    '''
+    #The following forms batch with size of 32x32
     startPoint = []
     truth = []
     for i in range(classNum):
@@ -71,11 +74,23 @@ def formBatch(img, imgInfo, epochIdx):
             # add halograms to an image, mask size is 5x5
             batch[i*numOfElementsPerClass+j][2:30, 2:30] = (img[i][(startPoint[i] + j) % imgInfo[0][i]]).reshape((28, 28))
             truth.append(i)
-    return batch, truth
+    return batch, truth'''
+    #Zhonghao's first commit forms batch size of 28*28
+    startPoint = []
+    truth = []
+    for i in range(classNum):
+        startPoint.append((epochIdx * numOfElementsPerClass) % imgInfo[0][i])
+    batch = np.ndarray(shape = (batchSize, imgInfo[2]), dtype = float)
+    for i in range(classNum):
+        for j in range(numOfElementsPerClass):
+            batch[i*numOfElementsPerClass+j] = img[i][(startPoint[i] + j) % imgInfo[0][i]]
+            truth.append(i)
+    return [batch, truth]
+
 
 '''
 description: automatically form a batch for testing. Evenly divide image number
-             for each class. 
+             for each class.
 input: img: from imgLoad()
        imgInfo: from imgLoad()
        epochIdx: epoch index
@@ -129,7 +144,7 @@ class Net(nn.Module):
         for s in size:
             num_features *= s
         return num_features
-    
+
 
 '''
 description: training process. Update weights with each batch of images
@@ -143,7 +158,8 @@ side effects:   weights of CNN are updated
 '''
 def train(batch, truth, net, lossCriterion, optimizer):
     #reshape a batch to [batch size, channels, Height, Width]
-    batchResize = batch.reshape((batchSize, 1, 32, 32))
+    #batchResize = batch.reshape((batchSize, 1, 32, 32))
+    batchResize = batch.reshape((batchSize, 1, 28, 28))
     #convert to a tensor
     batchFeed = Variable(torch.from_numpy(batchResize))
     #inference and back propagate and update weights
@@ -151,13 +167,15 @@ def train(batch, truth, net, lossCriterion, optimizer):
     #print(output.data.numpy()[0], truth[0])
     target = torch.LongTensor(truth)
     target = Variable(target)
+    #print(target)
     optimizer.zero_grad()   # zero the gradient buffers
     loss = lossCriterion(output, target)
+    print(loss)
     loss.backward()
     optimizer.step()    # Does the update
 
 '''
-description: testing process. 
+description: testing process.
 input:  batch: from formBatch
         truth: from formBatch
         net: from class Net()
@@ -167,7 +185,8 @@ side effects: None
 '''
 def test(batch, truth, net):
     #reshape a batch to [batch size, channels, Height, Width]
-    batchResize = batch.reshape((batchSize, 1, 32, 32))
+    #batchResize = batch.reshape((batchSize, 1, 32, 32))
+    batchResize = batch.reshape((batchSize, 1, 28, 28))
     #convert to a tensor
     batchFeed = Variable(torch.from_numpy(batchResize))
     #inference and back propagate and update weights
@@ -175,36 +194,36 @@ def test(batch, truth, net):
     #output = output.data.numpy()
     _, predicted = torch.max(output.data, 1)
     return (predicted == torch.LongTensor(truth)).sum()
-    
-    
 
-def main():  
+
+
+def main():
     # load process
     img = []
     imgInfo = [] #[[img number], [category names], img size]
     imgLoad(img, imgInfo)
-    
+
     #train process
     lossCriterion = nn.CrossEntropyLoss() #using cross entropy loss
-    net = Net()
+    #net = Net()
+    net=GoogleNet().double()
     # create optimizer
     optimizer = optim.SGD(net.parameters(), lr=0.001, momentum=0.9) # use SGD update rules
+    print(epochNum)
     for epochIdx in range(epochNum):
+        print(epochIdx);
         batch, truth = formBatch(img, imgInfo, epochIdx)
         train(batch, truth, net, lossCriterion, optimizer)
-        
+
     #test process, still in progress
     correctNum = 0
     for epochIdx in range(int(testNum / batchSize)):
         batch, truth = formBatch(img, imgInfo, epochIdx)
         correctNum += test(batch, truth, net)
     print("accuracy = %f" %(float(correctNum) / testNum))
-        
-    
 
-        
+
+
+
 if __name__ == "__main__":
     main()
-    
-    
-    
