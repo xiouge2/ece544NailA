@@ -5,7 +5,7 @@ Created on Wed Oct 25 19:25:22 2017
 
 @author: zhonghao
 """
-
+import sys #make it work on pytorch
 import numpy as np
 import matplotlib.pyplot as plt
 import torch
@@ -14,13 +14,25 @@ import torch.nn as nn
 import torch.nn.functional as F
 import torch.optim as optim
 from googleNetClass import GoogleNet
-import sys #make it work on pytorch
+import argparse
 
 classNum = 5
 batchSize = 50
 numOfElementsPerClass = int(batchSize / classNum)
 epochNum = 1000
 testNum = 100
+
+'''
+Best practice of using cuda for training
+'''
+parser = argparse.ArgumentParser(description='train_cuda')
+parser.add_argument('--no-cuda', action='store_true', default=False,
+help='disables CUDA training')
+
+args = parser.parse_args()
+args.cuda = not args.no_cuda and torch.cuda.is_available()
+
+
 
 '''
 description: input an 2D array, show image of that array on console
@@ -207,13 +219,17 @@ def main():
     #train process
     lossCriterion = nn.CrossEntropyLoss() #using cross entropy loss
     #net = Net()
-    net=GoogleNet().double()
+    if args.cuda:
+        net=GoogleNet().double().cuda()
+        print("cuda googlenet")
     # create optimizer
     optimizer = optim.SGD(net.parameters(), lr=0.001, momentum=0.9) # use SGD update rules
     print(epochNum)
     for epochIdx in range(epochNum):
         print(epochIdx);
         batch, truth = formBatch(img, imgInfo, epochIdx)
+        if args.cuda:
+            batch,truth=batch.cuda(),truth.cuda()
         train(batch, truth, net, lossCriterion, optimizer)
 
     #test process, still in progress
