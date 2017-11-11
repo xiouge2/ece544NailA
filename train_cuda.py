@@ -13,13 +13,13 @@ from torch.autograd import Variable
 import torch.nn as nn
 import torch.nn.functional as F
 import torch.optim as optim
-from googleNetClass import GoogleNet
+from googleNetClass_cuda import GoogleNetCuda
 import argparse
 
 classNum = 5
 batchSize = 50
 numOfElementsPerClass = int(batchSize / classNum)
-epochNum = 1000
+epochNum = 500
 testNum = 100
 
 '''
@@ -176,9 +176,9 @@ def train(batch, truth, net, lossCriterion, optimizer):
     #convert to a tensor
     batchFeed = Variable(torch.from_numpy(batchResize))
     #inference and back propagate and update weights
-    output = net(batchFeed)
+    output = net(batchFeed).cuda()
     #print(output.data.numpy()[0], truth[0])
-    target = torch.LongTensor(truth)
+    target = torch.cuda.LongTensor(truth)
     target = Variable(target)
     #print(target)
     optimizer.zero_grad()   # zero the gradient buffers
@@ -203,10 +203,10 @@ def test(batch, truth, net):
     #convert to a tensor
     batchFeed = Variable(torch.from_numpy(batchResize))
     #inference and back propagate and update weights
-    output = net(batchFeed)
+    output = net(batchFeed).cuda()
     #output = output.data.numpy()
     _, predicted = torch.max(output.data, 1)
-    return (predicted == torch.LongTensor(truth)).sum()
+    return (predicted == torch.cuda.LongTensor(truth)).sum()
 
 
 
@@ -220,7 +220,7 @@ def main():
     lossCriterion = nn.CrossEntropyLoss() #using cross entropy loss
     #net = Net()
     if args.cuda:
-        net=GoogleNet().double().cuda()
+        net=GoogleNetCuda().double().cuda()
         print("cuda googlenet")
     # create optimizer
     optimizer = optim.SGD(net.parameters(), lr=0.001, momentum=0.9) # use SGD update rules
@@ -228,8 +228,8 @@ def main():
     for epochIdx in range(epochNum):
         print(epochIdx);
         batch, truth = formBatch(img, imgInfo, epochIdx)
-        if args.cuda:
-            batch,truth=batch.cuda(),truth.cuda()
+        #if args.cuda:
+        #    batch,truth=batch.cuda(),truth.cuda()
         train(batch, truth, net, lossCriterion, optimizer)
 
     #test process, still in progress
