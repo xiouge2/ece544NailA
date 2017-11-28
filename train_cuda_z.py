@@ -23,7 +23,7 @@ classNum = 5
 batchSize = 50
 numOfElementsPerClass = int(batchSize / classNum)
 epochNum = 1000
-testNum = 1000
+testNum = 100
 z_height=16
 z_width=8
 
@@ -55,7 +55,7 @@ def formBatch(classZ, z_value, epochIdx):
     batch = np.ndarray(shape = (batchSize, len(z_value[0][0])), dtype = float)
     for i in range(classNum):
         for j in range(numOfElementsPerClass):
-            #print(z_value[i][(startPoint[i] + j) % classZ[i]])
+            #print(i,z_value[i][(startPoint[i] + j) % classZ[i]])
             batch[i*numOfElementsPerClass+j] = z_value[i][(startPoint[i] + j) % classZ[i]]
             truth.append(i)
     return [batch, truth]
@@ -84,18 +84,18 @@ side effects:   weights of CNN are updated
 def train(batch, truth, net, lossCriterion, optimizer):
     #reshape a batch to [batch size, channels, Height, Width]
     #batchResize = batch.reshape((batchSize, 1, 32, 32))
-    batchResize = batch.reshape((batchSize, 1, z_height, z_width))#???input size of z_value
+    batchResize = batch.reshape((batchSize, 1, z_height, z_width))
     #convert to a tensor
     batchFeed = Variable(torch.from_numpy(batchResize))
     #inference and back propagate and update weights
-    output = net(batchFeed).cuda()
-    #print(output.data.numpy()[0], truth[0])
+    output = net(batchFeed).cuda().double()
     target = torch.cuda.LongTensor(truth)
     target = Variable(target)
-    #print(target)
+
     optimizer.zero_grad()   # zero the gradient buffers
+    #print(output,target)
     loss = lossCriterion(output, target)
-    print(loss)
+    print(output,target,loss)
     loss.backward()
     optimizer.step()    # Does the update
 
@@ -121,7 +121,6 @@ def test(batch, truth, net):
     return (predicted == torch.cuda.LongTensor(truth)).sum()
 
 def get_z_values(classZ,z_value,z_value_tests,filename):
-    print(z_value,z_value_tests)
     for i in range(classNum):
         test=0;
         fileread = open('class_z_value/'+filename[i], 'r')
@@ -137,6 +136,25 @@ def get_z_values(classZ,z_value,z_value_tests,filename):
                 z_value[i].append(copy.deepcopy(oneStroke))
                 classZ[i]+=1;
 
+def get_z_values_short_version(classZ,z_value,z_value_tests,filename):
+    for i in range(classNum):
+        c=0;
+        test=0;
+        fileread = open('class_z_value/'+filename[i], 'r')
+        csvreader = csv.reader(fileread, delimiter=',')
+        for row in csvreader:
+            if c<1000:
+                c+=1;
+                oneStroke = []
+                for item in row:
+                    oneStroke.append(float(item))
+                if test<testNum:
+                    z_value_tests[i].append(copy.deepcopy(oneStroke))
+                    test+=1;
+                else:
+                    z_value[i].append(copy.deepcopy(oneStroke))
+                    classZ[i]+=1;
+
 def main():
     #initialize
     z_value=[]
@@ -149,6 +167,7 @@ def main():
 
     #train process
     lossCriterion = nn.CrossEntropyLoss() #using cross entropy loss
+    #lossCriterion = nn.MSELoss()
     #net = Net()
 
     p_model = open("googlenet_model.p", 'wb')
@@ -158,9 +177,9 @@ def main():
         net=GoogleNetCuda().double().cuda()
         print("cuda googlenet")
     # create optimizer
-    optimizer = optim.SGD(net.parameters(), lr=0.001, momentum=0.9) # use SGD update rules
+    optimizer = optim.SGD(net.parameters(), lr=0.0001, momentum=0.9) # use SGD update rules
 
-    get_z_values(classZ,z_value,z_value_tests,filenames)
+    get_z_values_short_version(classZ,z_value,z_value_tests,filenames)
     print(classZ,len(z_value_tests))
 
     for epochIdx in range(epochNum):
