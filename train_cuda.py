@@ -15,11 +15,12 @@ import torch.nn.functional as F
 import torch.optim as optim
 from googleNetClass_cuda import GoogleNetCuda
 import argparse
+import pickle
 
 classNum = 5
 batchSize = 50
 numOfElementsPerClass = int(batchSize / classNum)
-epochNum = 500
+epochNum = 10
 testNum = 100
 
 '''
@@ -219,8 +220,13 @@ def main():
     #train process
     lossCriterion = nn.CrossEntropyLoss() #using cross entropy loss
     #net = Net()
+
+    p_model = open("googlenet_model.p", 'wb')
+
     if args.cuda:
         net=GoogleNetCuda().double().cuda()
+        torch.save(net.state_dict(),p_model)
+        p_model.close()
         print("cuda googlenet")
     # create optimizer
     optimizer = optim.SGD(net.parameters(), lr=0.001, momentum=0.9) # use SGD update rules
@@ -232,6 +238,11 @@ def main():
         #    batch,truth=batch.cuda(),truth.cuda()
         train(batch, truth, net, lossCriterion, optimizer)
 
+    p_model = open("googlenet_model.p", 'rb')
+    stored_net=GoogleNetCuda().double().cuda()
+    stored_net.load_state_dict(torch.load(p_model));
+    p_model.close()
+    print(stored_net)
     #test process, still in progress
     correctNum = 0
     for epochIdx in range(int(testNum / batchSize)):
