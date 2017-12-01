@@ -48,6 +48,7 @@ sip.setapi('QString', 2)
 sip.setapi('QVariant', 2)
 
 from PyQt4 import QtCore, QtGui
+from train_rnn import raw2simplified
 import json
 
 class ScribbleArea(QtGui.QWidget):
@@ -66,8 +67,9 @@ class ScribbleArea(QtGui.QWidget):
 #       self.image = QtGui.QImage()
         self.image = QtGui.QImage(imageSize, QtGui.QImage.Format_RGB32)
         self.lastPoint = QtCore.QPoint()
-        self.position = {}
+        #self.position = {}
         self.stroke_index = 0
+        self.position = []
 
     def openImage(self, fileName):
         loadedImage = QtGui.QImage()
@@ -116,7 +118,7 @@ class ScribbleArea(QtGui.QWidget):
             self.lastPoint = event.pos()
             self.scribbling = True
             self.stroke_index += 1
-            self.position[self.stroke_index] = []
+            #self.position[self.stroke_index] = []
             self.x_coord = []
             self.y_coord = []
 
@@ -124,16 +126,17 @@ class ScribbleArea(QtGui.QWidget):
         if (event.buttons() & QtCore.Qt.LeftButton) and self.scribbling:
             self.x_coord.append(event.x())
             self.y_coord.append(event.y())
-            print 'mouseMoveEvent: x=%d, y=%d' % (event.x(), event.y())
+            print 'mouseMoveEvent: x=%f, y=%f' % (event.x(), event.y())
             self.drawLineTo(event.pos())
 
     def mouseReleaseEvent(self, event):
         if event.button() == QtCore.Qt.LeftButton and self.scribbling:
             self.drawLineTo(event.pos())
             self.scribbling = False
-            self.x_coord = [t - s for s, t in zip(self.x_coord, self.x_coord[1:])]
-            self.y_coord = [t - s for s, t in zip(self.y_coord, self.y_coord[1:])]
-            self.position[self.stroke_index] = [self.x_coord, self.y_coord]
+            #self.position[self.stroke_index] = [self.x_coord, self.y_coord]
+            self.position.append([self.x_coord, self.y_coord])
+            self.dx_coord = [(t - s)*(256.0/500.0) for s, t in zip(self.x_coord, self.x_coord[1:])]
+            self.dy_coord = [(t - s)*(256.0/500.0) for s, t in zip(self.y_coord, self.y_coord[1:])]
             #self.position[self.stroke_index]['y'] = 
             print self.position
 
@@ -365,10 +368,24 @@ class MainWindow(QtGui.QMainWindow):
         fileName = QtGui.QFileDialog.getSaveFileName(self, "Save As",
             initialPath,
             "%s Files (*.%s);;All Files (*)" % (fileFormat.upper(), fileFormat))
-
+        # coordinate = []
+        # for key, x_y in self.scribbleArea.position.iteritems():
+        #     x = x_y[0]
+        #     y = x_y[1]
+        #     if key 
+        #     [[dx, dy, ] for dx, dy in zip(x,y)]
+        simplified_pos = raw2simplified(self.scribbleArea.position)
+        output_data = []
+        for i in range(len(simplified_pos)):
+            dx = [(t - s)*(256.0/500.0) for s, t in zip(simplified_pos[i][0], simplified_pos[i][0][1:])]
+            dy = [(t - s)*(256.0/500.0) for s, t in zip(simplified_pos[i][1], simplified_pos[i][1][1:])]
+            for j in range(len(dx)):
+                if j == (len(dx)-1):
+                    output_data.append([dx[j],dy[j],1])
+                else:
+                    output_data.append([dx[j],dy[j],0])
         with open('data.json', 'w') as fp:
-            json.dump(self.scribbleArea.position, fp, sort_keys=True, indent=4)
-
+            json.dump(output_data, fp, sort_keys=True, indent=4)
         if fileName:
             return self.scribbleArea.saveImage(fileName, fileFormat)
         return False
