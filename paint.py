@@ -115,7 +115,7 @@ class ScribbleArea(QtGui.QWidget):
         self.stroke_index = 0
         self.position = []
 
-        model_dir = './rnn_model_2'
+        model_dir = './rnn_model'
         [self.hps_model, self.eval_hps_model, self.sample_hps_model] = load_model(model_dir)
         # construct the sketch-rnn model here:
         reset_graph()
