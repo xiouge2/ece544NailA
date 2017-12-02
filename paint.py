@@ -64,6 +64,7 @@ import math
 import csv
 import tensorflow as tf
 from six.moves import xrange
+import sys
 
 # libraries required for visualisation:
 from IPython.display import SVG, display
@@ -130,6 +131,7 @@ class ScribbleArea(QtGui.QWidget):
         load_checkpoint(self.sess, model_dir)
 
         self.z_means = np.load('z_means.npy')
+        self.count = 0
 
     def openImage(self, fileName):
         loadedImage = QtGui.QImage()
@@ -179,8 +181,8 @@ class ScribbleArea(QtGui.QWidget):
             self.scribbling = True
             self.stroke_index += 1
             #self.position[self.stroke_index] = []
-            self.x_coord = []
-            self.y_coord = []
+            self.x_coord = [event.x()]
+            self.y_coord = [event.y()]
 
     def mouseMoveEvent(self, event):
         if (event.buttons() & QtCore.Qt.LeftButton) and self.scribbling:
@@ -188,6 +190,12 @@ class ScribbleArea(QtGui.QWidget):
             self.y_coord.append(event.y())
             #print 'mouseMoveEvent: x=%f, y=%f' % (event.x(), event.y())
             self.drawLineTo(event.pos())
+            
+            self.count += 1
+            if self.count % 10 == 0:
+                self.position.append([self.x_coord, self.y_coord])
+                self.inference()
+                del self.position[-1]
 
 
 
@@ -203,43 +211,47 @@ class ScribbleArea(QtGui.QWidget):
             #print self.position
             #print self.dx_coord
             #print self.dy_coord
-            stroke = []
+            self.inference()
 
-            simp = self.position
-            for i in range(len(simp)):
-                if i == 0:
-                    line = [[sx , sy] for sx, sy in zip(simp[i][0], simp[i][1])]
-                    line = rdp(line, 2.0)
-                    for j in range(len(line)-1):
-                        stroke.append([line[j+1][0] - line[j][0],line[j+1][1] - line[j][1], 0.])
-                    stroke[-1][2] = 1.0
-                else:
-                    line = [[sx , sy] for sx, sy in zip(simp[i][0], simp[i][1])]
-                    line = rdp(line, 2.0)
-                    stroke.append([line[0][0] - simp[i-1][0][-1], line[0][1] - simp[i-1][1][-1], 0.])
-                    for j in range(len(line)-1):
-                        stroke.append([line[j+1][0] - line[j][0],line[j+1][1] - line[j][1], 0.])
-                    stroke[-1][2] = 1.0
-            #print(simp)
-            #print(stroke)
-            test_set = DataLoader(
-                [stroke],
-                batch_size=1,
-                max_seq_length=125,
-                random_scale_factor=0.0,
-                augment_stroke_prob=0.0)
-            normalizing_scale_factor = test_set.calculate_normalizing_scale_factor()
-            test_set.normalize(normalizing_scale_factor)
-            stroke = test_set.strokes[0]
-            #print(stroke)
-            z = encode(self.sess, self.sample_model, self.eval_model, self.model, stroke)
-            #print(z)
-            
-            diff = np.zeros(5)
-            for j in range(5):
-                diff[j] = np.linalg.norm(z - self.z_means[j])
-            name = ['eye', 'finger', 'foot', 'hand', 'leg']
-            print(name[np.argmin(diff)])
+    def inference(self):
+        stroke = []
+        simp = self.position
+        for i in range(len(simp)):
+            if i == 0:
+                line = [[sx , sy] for sx, sy in zip(simp[i][0], simp[i][1])]
+                line = rdp(line, 2.0)
+                for j in range(len(line)-1):
+                    stroke.append([line[j+1][0] - line[j][0],line[j+1][1] - line[j][1], 0.])
+                stroke[-1][2] = 1.0
+            else:
+                line = [[sx , sy] for sx, sy in zip(simp[i][0], simp[i][1])]
+                line = rdp(line, 2.0)
+                stroke.append([line[0][0] - simp[i-1][0][-1], line[0][1] - simp[i-1][1][-1], 0.])
+                for j in range(len(line)-1):
+                    stroke.append([line[j+1][0] - line[j][0],line[j+1][1] - line[j][1], 0.])
+                stroke[-1][2] = 1.0
+        #print(simp)
+        #print(stroke)
+        sys.stdout = open(os.devnull, 'w')
+        test_set = DataLoader(
+            [stroke],
+            batch_size=1,
+            max_seq_length=125,
+            random_scale_factor=0.0,
+            augment_stroke_prob=0.0)
+        sys.stdout = sys.__stdout__
+        normalizing_scale_factor = test_set.calculate_normalizing_scale_factor()
+        test_set.normalize(normalizing_scale_factor)
+        stroke = test_set.strokes[0]
+        #print(stroke)
+        z = encode(self.sess, self.sample_model, self.eval_model, self.model, stroke)
+        #print(z)
+        
+        diff = np.zeros(5)
+        for j in range(5):
+            diff[j] = np.linalg.norm(z - self.z_means[j])
+        name = ['eye', 'finger', 'foot', 'hand', 'leg']
+        print(name[np.argmin(diff)])
 
     def paintEvent(self, event):
         painter = QtGui.QPainter(self)
@@ -493,8 +505,6 @@ class MainWindow(QtGui.QMainWindow):
 
 
 if __name__ == '__main__':
-
-    import sys
 
     app = QtGui.QApplication(sys.argv)
     window = MainWindow()
