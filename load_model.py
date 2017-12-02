@@ -97,7 +97,9 @@ def encode(sess, sample_model, eval_model, model,
   strokes = to_big_strokes(input_strokes).tolist()
   strokes.insert(0, [0, 0, 1, 0, 0])
   
-  del strokes[59:]
+  del strokes[126:]
+  #if strokes[6][4] != 1.0:
+  #    print(strokes)
   
   seq_len = [len(input_strokes)]
   #draw_strokes(to_normal_strokes(np.array(strokes)))
@@ -116,9 +118,11 @@ def decode(sess, sample_model, eval_model, model,
 
 def main():
     
+    data_dir = './image_full_npz'
+    model_dir = './rnn_model_2'
+
     '''
-    model_dir = './rnn_model'
-    [hps_model, eval_hps_model, sample_hps_model] = load_model(model_dir)
+    [train_set, valid_set, test_set, hps_model, eval_hps_model, sample_hps_model] = load_env(data_dir, model_dir)
     
     # construct the sketch-rnn model here:
     reset_graph()
@@ -131,19 +135,87 @@ def main():
     
     # loads the weights from checkpoint into our model
     load_checkpoint(sess, model_dir)
+    #load stroke
+    while(1):
+        stroke = test_set.random_sample()
+        print(stroke)
+        draw_strokes(stroke)
+        z = encode(sess, sample_model, eval_model, model, stroke)
+
+    data_dir = './image_full_npz'
+    model_dir = './rnn_model_2'
+    [train_set, valid_set, test_set, hps_model, eval_hps_model, sample_hps_model] = load_env(data_dir, model_dir)
+    '''
+    test = [[[  14,  -12,    0],
+            [  58,  -24,    0],
+            [  58,  -17,    0],
+            [  53,   -5,    0],
+            [  49,    4,    1],
+            [-229,   55,    0],
+            [   0,   10,    0],
+            [  11,   21,    0],
+            [  11,    9,    0],
+            [  20,    8,    0],
+            [  26,    5,    0],
+            [  77,    0,    0],
+            [  19,   -4,    0],
+            [  16,   -8,    0],
+            [  21,  -34,    0],
+            [  24,  -63,    1],
+            [-108,   14,    0],
+            [ -16,    4,    0],
+            [ -14,   15,    0],
+            [  -6,   26,    0],
+            [   2,   12,    0],
+            [   7,   10,    0],
+            [  31,   10,    0],
+            [  16,   -1,    0],
+            [  13,   -6,    0],
+            [   9,  -10,    0],
+            [   4,  -12,    0],
+            [  -9,  -24,    0],
+            [ -25,  -14,    1],
+            [ -87,   -4,    0],
+            [ -41,  -49,    1],
+            [  85,   31,    0],
+            [  -9,  -47,    1],
+            [  74,   37,    0],
+            [  11,  -30,    0],
+            [  15,  -25,    1]]]
+    [hps_model, eval_hps_model, sample_hps_model] = load_model(model_dir)
+    # construct the sketch-rnn model here:
+    reset_graph()
+    model = Model(hps_model)
+    eval_model = Model(eval_hps_model, reuse=True)
+    sample_model = Model(sample_hps_model, reuse=True)
     
-    load_dataset(data_dir, model, inference_mode=True)
+    sess = tf.InteractiveSession()
+    sess.run(tf.global_variables_initializer())
     
-    # randomly unconditionally generate 10 examples
+    # loads the weights from checkpoint into our model
+    load_checkpoint(sess, model_dir)
+    #load stroke
+    test_set = DataLoader(
+      test,
+      batch_size=1,
+      max_seq_length=125,
+      random_scale_factor=0.0,
+      augment_stroke_prob=0.0)
+    normalizing_scale_factor = test_set.calculate_normalizing_scale_factor()
+    test_set.normalize(normalizing_scale_factor)
+    stroke = test_set.strokes[0]
+    print(stroke)
+    draw_strokes(stroke)
+    z = encode(sess, sample_model, eval_model, model, stroke)
+    print(z)
+    z_means = np.load('z_means.npy')
+    diff = np.zeros(5)
+    for j in range(5):
+        diff[j] = np.linalg.norm(z - z_means[j])
+    name = ['eye', 'finger', 'foot', 'hand', 'leg']
+    print(name[np.argmin(diff)])
     
-    N = 10
-    reconstructions = []
-    for i in range(N):
-        reconstructions.append([decode(sess, sample_model, eval_model, model,
-                                       temperature=0.5, draw_mode=False), [0, i]])
-        
-    stroke_grid = make_grid_svg(reconstructions)
-    draw_strokes(stroke_grid)
+    
     '''
     
     data_dir = './image_full_npz'
@@ -170,6 +242,7 @@ def main():
         stroke = train_set.strokes[i]
         z = encode(sess, sample_model, eval_model, model, stroke)
         csvwriter.writerow(z)
+    '''
     
 if __name__ == "__main__":
     main()

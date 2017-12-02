@@ -50,6 +50,50 @@ sip.setapi('QVariant', 2)
 from PyQt4 import QtCore, QtGui
 from train_rnn import raw2simplified
 import json
+from rdp import rdp
+
+# import the required libraries
+import numpy as np
+import time
+import random
+import cPickle
+import codecs
+import collections
+import os
+import math
+import csv
+import tensorflow as tf
+from six.moves import xrange
+
+# libraries required for visualisation:
+from IPython.display import SVG, display
+import svgwrite # conda install -c omnia svgwrite=1.1.6
+import PIL
+from PIL import Image
+import matplotlib.pyplot as plt
+
+# set numpy output to something sensible
+np.set_printoptions(precision=8, edgeitems=6, linewidth=200, suppress=True)
+tf.logging.info("TensorFlow Version: %s", tf.__version__)
+
+# import our command line tools
+from magenta.models.sketch_rnn.sketch_rnn_train import *
+from magenta.models.sketch_rnn.model import *
+from magenta.models.sketch_rnn.utils import *
+from magenta.models.sketch_rnn.rnn import *
+
+def encode(sess, sample_model, eval_model, model,
+           input_strokes):
+  strokes = to_big_strokes(input_strokes).tolist()
+  strokes.insert(0, [0, 0, 1, 0, 0])
+  
+  del strokes[126:]
+  #if strokes[6][4] != 1.0:
+  #    print(strokes)
+  
+  seq_len = [len(input_strokes)]
+  #draw_strokes(to_normal_strokes(np.array(strokes)))
+  return sess.run(eval_model.batch_z, feed_dict={eval_model.input_data: [strokes], eval_model.sequence_lengths: seq_len})[0]
 
 class ScribbleArea(QtGui.QWidget):
     """
@@ -70,6 +114,22 @@ class ScribbleArea(QtGui.QWidget):
         #self.position = {}
         self.stroke_index = 0
         self.position = []
+
+        model_dir = './rnn_model_2'
+        [self.hps_model, self.eval_hps_model, self.sample_hps_model] = load_model(model_dir)
+        # construct the sketch-rnn model here:
+        reset_graph()
+        self.model = Model(self.hps_model)
+        self.eval_model = Model(self.eval_hps_model, reuse=True)
+        self.sample_model = Model(self.sample_hps_model, reuse=True)
+    
+        self.sess = tf.InteractiveSession()
+        self.sess.run(tf.global_variables_initializer())
+    
+        # loads the weights from checkpoint into our model
+        load_checkpoint(self.sess, model_dir)
+
+        self.z_means = np.load('z_means.npy')
 
     def openImage(self, fileName):
         loadedImage = QtGui.QImage()
@@ -126,8 +186,10 @@ class ScribbleArea(QtGui.QWidget):
         if (event.buttons() & QtCore.Qt.LeftButton) and self.scribbling:
             self.x_coord.append(event.x())
             self.y_coord.append(event.y())
-            print 'mouseMoveEvent: x=%f, y=%f' % (event.x(), event.y())
+            #print 'mouseMoveEvent: x=%f, y=%f' % (event.x(), event.y())
             self.drawLineTo(event.pos())
+
+
 
     def mouseReleaseEvent(self, event):
         if event.button() == QtCore.Qt.LeftButton and self.scribbling:
@@ -138,7 +200,46 @@ class ScribbleArea(QtGui.QWidget):
             self.dx_coord = [(t - s)*(256.0/500.0) for s, t in zip(self.x_coord, self.x_coord[1:])]
             self.dy_coord = [(t - s)*(256.0/500.0) for s, t in zip(self.y_coord, self.y_coord[1:])]
             #self.position[self.stroke_index]['y'] = 
-            print self.position
+            #print self.position
+            #print self.dx_coord
+            #print self.dy_coord
+            stroke = []
+
+            simp = self.position
+            for i in range(len(simp)):
+                if i == 0:
+                    line = [[sx , sy] for sx, sy in zip(simp[i][0], simp[i][1])]
+                    line = rdp(line, 2.0)
+                    for j in range(len(line)-1):
+                        stroke.append([line[j+1][0] - line[j][0],line[j+1][1] - line[j][1], 0.])
+                    stroke[-1][2] = 1.0
+                else:
+                    line = [[sx , sy] for sx, sy in zip(simp[i][0], simp[i][1])]
+                    line = rdp(line, 2.0)
+                    stroke.append([line[0][0] - simp[i-1][0][-1], line[0][1] - simp[i-1][1][-1], 0.])
+                    for j in range(len(line)-1):
+                        stroke.append([line[j+1][0] - line[j][0],line[j+1][1] - line[j][1], 0.])
+                    stroke[-1][2] = 1.0
+            #print(simp)
+            #print(stroke)
+            test_set = DataLoader(
+                [stroke],
+                batch_size=1,
+                max_seq_length=125,
+                random_scale_factor=0.0,
+                augment_stroke_prob=0.0)
+            normalizing_scale_factor = test_set.calculate_normalizing_scale_factor()
+            test_set.normalize(normalizing_scale_factor)
+            stroke = test_set.strokes[0]
+            #print(stroke)
+            z = encode(self.sess, self.sample_model, self.eval_model, self.model, stroke)
+            #print(z)
+            
+            diff = np.zeros(5)
+            for j in range(5):
+                diff[j] = np.linalg.norm(z - self.z_means[j])
+            name = ['eye', 'finger', 'foot', 'hand', 'leg']
+            print(name[np.argmin(diff)])
 
     def paintEvent(self, event):
         painter = QtGui.QPainter(self)
